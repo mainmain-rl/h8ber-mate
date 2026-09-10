@@ -15,7 +15,7 @@
 
 **Intelligent Kubernetes deployment hibernation scheduler**
 
-[![Build and Push Docker Images](https://github.com/mainmain-rl/h8ber-mate/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/mainmain-rl/h8ber-mate/actions/workflows/docker-publish.yml)
+[![Build and Push Docker Images](https://github.com/mainmain-rl/h8ber-mate/actions/workflows/tagged-image-publisher.yaml/badge.svg)](https://github.com/mainmain-rl/h8ber-mate/actions/workflows/tagged-image-publisher.yaml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
@@ -56,6 +56,8 @@ Perfect for:
 - **Conflict detection**: Prevents duplicate schedules for the same deployment
 - **State restoration**: Automatically restores original replica count
 - **Smart enable/disable**: Scales deployments intelligently when toggling schedules
+- **Users**: Possibility to create multiples users to manage specific namespace
+- **API KEY**: Possibility to create multiples API Keys to manage resources
 
 ### 🎨 Modern UI
 
@@ -63,6 +65,12 @@ Perfect for:
 - **Easy management**: Create, edit, and delete schedules with a clean interface
 - **Status tracking**: See which deployments are currently hibernated
 - **Responsive design**: Works on desktop, tablet, and mobile
+
+### 📦️ REST API
+
+- **Schedules**: Create, edit, and delete Schedules with the API
+- **Users**: Create, edit, and delete Users with the API
+- **API KEY**: Create, edit, and delete API KEY with the API
 
 ### 🚀 Production Ready
 

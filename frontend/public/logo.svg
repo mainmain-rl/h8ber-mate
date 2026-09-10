@@ -1,0 +1,18 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Bear body -->
+  <ellipse cx="100" cy="120" rx="45" ry="40" fill="#326CE5"/>
+
+  <!-- Bear head -->
+  <circle cx="100" cy="80" r="30" fill="#326CE5"/>
+
+  <!-- Ears -->
+  <circle cx="80" cy="65" r="12" fill="#326CE5"/>
+  <circle cx="120" cy="65" r="12" fill="#326CE5"/>
+
+  <!-- Sleeping eyes (closed) - solid shapes for better visibility -->
+  <ellipse cx="92" cy="78" rx="6" ry="3" fill="#FFFFFF"/>
+  <ellipse cx="108" cy="78" rx="6" ry="3" fill="#FFFFFF"/>
+
+  <!-- Nose -->
+  <ellipse cx="100" cy="88" rx="4" ry="3" fill="#FFFFFF"/>
+</svg>

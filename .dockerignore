@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node (for backend, we don't need frontend)
+node_modules/
+
+# Docker
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# Kubernetes
+k8s/
+
+# Documentation
+*.md
+docs/
+
+# Scripts
+scripts/README.md
+
+frontend/node_modules
+frontend/dist
+backend/.venv
+backend/__pycache__
+**/.git
+**/.DS_Store

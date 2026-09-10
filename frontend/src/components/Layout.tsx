@@ -53,7 +53,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                     h8ber-mate
                   </h1>
-                  <p className="text-xs text-gray-500">K8s Hibernation</p>
+                  <p className="text-xs text-gray-500">K8S Hibernation</p>
                 </div>
               </Link>
 

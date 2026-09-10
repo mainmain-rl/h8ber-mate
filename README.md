@@ -11,7 +11,7 @@
 
 <div align="center">
 
-![h8ber-mate dashboard](doc/screen_dashboard.png)
+![h8ber-mate dashboard](doc/screen_dashboard_compressed.png)
 
 **Intelligent Kubernetes deployment hibernation scheduler**
 

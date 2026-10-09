@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from src.k8s.services import K8sClient
-from src.shared.database import AsyncSessionLocal, ScheduleDB
+from src.schedules.db import ScheduleDB
+from src.shared.database import AsyncSessionLocal
 from src.shared.settings import settings
 
 logger = logging.getLogger(__name__)

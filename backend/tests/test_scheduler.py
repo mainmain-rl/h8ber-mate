@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.schedules.services import SchedulerService
-from src.shared.database.models import ScheduleDB
+from src.schedules.db import ScheduleDB
 from src.shared.settings import settings
 
 

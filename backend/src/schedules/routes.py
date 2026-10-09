@@ -9,7 +9,8 @@ from starlette.concurrency import run_in_threadpool
 from src.k8s.services import K8sClient, get_k8s_client
 from src.shared.audit import get_client_ip, log_action
 from src.shared.auth.auth_simple import check_namespace_access, get_current_user
-from src.shared.database import ScheduleDB, get_db
+from src.shared.database import get_db
+from src.schedules.db import ScheduleDB
 from src.shared.settings import settings
 
 from .models import Schedule, ScheduleCreate, ScheduleUpdate

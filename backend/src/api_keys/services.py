@@ -8,8 +8,7 @@ import pytz
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.database.models import ApiKeyDB
-from src.shared.settings import settings
+from src.shared import ApiKeyDB, settings
 
 # Get configured timezone
 tz = pytz.timezone(settings.TIMEZONE)

@@ -1,6 +1,7 @@
 """Scheduler services."""
 
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime
 
 import pytz
@@ -26,6 +27,11 @@ def get_current_time() -> datetime:
     return local_time.replace(tzinfo=None)
 
 
+def _get_deployment_key(schedule: ScheduleDB) -> tuple[str, str]:
+    """Get unique key for a deployment (namespace, deployment_name)."""
+    return (schedule.namespace, schedule.deployment_name)
+
+
 class SchedulerService:
     """Service to manage scheduled scaling operations"""
 
@@ -49,104 +55,140 @@ class SchedulerService:
             self.is_running = False
             logger.debug("Scheduler stopped")
 
-    async def check_schedules(self):
-        """Check all enabled schedules and perform scaling if needed"""
+    async def check_schedules(
+        self,
+        db: AsyncSession | None = None,
+        k8s_client: K8sClient | None = None,
+        current_time: str | None = None,
+    ):
+        """Check all enabled schedules and perform scaling if needed.
+
+        Args:
+            db: Optional database session for testing. If not provided, creates own session.
+            k8s_client: Optional K8s client for testing. If not provided, creates own client.
+            current_time: Optional current time string (HH:MM) for testing. If not provided, uses actual time.
+        """
         logger.debug("Checking schedules...")
 
-        # Create K8s client for in-cluster access
-        k8s_client = K8sClient()
+        # Use provided or create K8s client
+        if k8s_client is None:
+            k8s_client = K8sClient()
 
-        async with AsyncSessionLocal() as db:
-            try:
+        # Use provided or create current time
+        if current_time is None:
+            tz = pytz.timezone(settings.TIMEZONE)
+            current_time = datetime.now(tz).strftime("%H:%M")
+
+        # Handle database session
+        own_session = db is None
+        if own_session:
+            db = AsyncSessionLocal()
+
+        try:
+            async with db:
                 # Get all enabled schedules
                 result = await db.execute(select(ScheduleDB).where(ScheduleDB.enabled))
                 schedules = result.scalars().all()
 
-                # Get current time in configured timezone
-                tz = pytz.timezone(settings.TIMEZONE)
-                current_time = datetime.now(tz).strftime("%H:%M")
                 logger.debug(f"Current time ({settings.TIMEZONE}): {current_time}, Found {len(schedules)} enabled schedules")
 
+                # Group schedules by deployment
+                by_deployment: dict[tuple[str, str], list[ScheduleDB]] = defaultdict(list)
                 for schedule in schedules:
-                    await self.process_schedule(db, schedule, current_time, k8s_client)
+                    by_deployment[_get_deployment_key(schedule)].append(schedule)
+
+                # Process each deployment group
+                for deployment_key, dep_schedules in by_deployment.items():
+                    await self.process_deployment(db, dep_schedules, current_time, k8s_client)
 
                 await db.commit()
 
-            except Exception as e:
-                logger.error(f"Error checking schedules: {e}")
+        except Exception as e:
+            logger.error(f"Error checking schedules: {e}")
+            if own_session:
                 await db.rollback()
 
-    async def process_schedule(self, db: AsyncSession, schedule: ScheduleDB, current_time: str, k8s_client: K8sClient):
-        """Process a single schedule"""
+    async def process_deployment(
+        self,
+        db: AsyncSession,
+        schedules: list[ScheduleDB],
+        current_time: str,
+        k8s_client: K8sClient,
+    ):
+        """Process all schedules for a single deployment.
+
+        Scale down if ANY ENABLED schedule is in hibernation period.
+        Scale up only if NO ENABLED schedule is in hibernation period.
+        """
+        namespace, deployment_name = schedules[0].namespace, schedules[0].deployment_name
+
         try:
-            # Check if we're in the hibernation period (between scale_down and scale_up times)
-            in_hibernation = self.is_in_hibernation_period(
-                schedule.scale_down_time,
-                schedule.scale_up_time,
-                current_time,
+            # Filter to only enabled schedules
+            enabled_schedules = [s for s in schedules if s.enabled]
+
+            # Check if ANY enabled schedule is in hibernation period
+            any_in_hibernation = any(
+                self.is_in_hibernation_period(s.scale_down_time, s.scale_up_time, current_time)
+                for s in enabled_schedules
             )
 
+            # Find the "primary" schedule row that holds deployment state
+            # Use the one with original_replicas set, or the first one
+            primary = next((s for s in schedules if s.original_replicas is not None), schedules[0])
+
             # If we're in hibernation period and deployment is NOT scaled down → scale down
-            if in_hibernation and not schedule.is_scaled_down:
+            if any_in_hibernation and not primary.is_scaled_down:
                 # Time to scale down
-                logger.debug(f"Scaling down {schedule.namespace}/{schedule.deployment_name}")
+                logger.debug(f"Scaling down {namespace}/{deployment_name} (triggered by schedule)")
 
                 # Get current replicas before scaling down
                 current_replicas = await run_in_threadpool(
                     k8s_client.get_deployment_replicas,
-                    schedule.namespace,
-                    schedule.deployment_name,
+                    namespace,
+                    deployment_name,
                 )
 
                 # Save original replicas if not already saved
-                if schedule.original_replicas is None or current_replicas > 0:
-                    schedule.original_replicas = current_replicas
+                if primary.original_replicas is None:
+                    primary.original_replicas = current_replicas
 
                 # Scale down to 0
                 await run_in_threadpool(
                     k8s_client.scale_down,
-                    schedule.namespace,
-                    schedule.deployment_name,
+                    namespace,
+                    deployment_name,
                 )
 
-                # Update schedule state
-                schedule.is_scaled_down = True
-                schedule.last_scaled_at = get_current_time()
-                schedule.updated_at = get_current_time()
+                # Update state on primary schedule (shared across all schedules for this deployment)
+                primary.is_scaled_down = True
+                primary.last_scaled_at = get_current_time()
+                primary.updated_at = get_current_time()
 
-                logger.info(f"Scaled down {schedule.namespace}/{schedule.deployment_name} from {current_replicas} to 0 replicas")
+                logger.info(f"Scaled down {namespace}/{deployment_name} from {current_replicas} to 0 replicas")
 
             # If we're NOT in hibernation period and deployment IS scaled down → scale up
-            elif not in_hibernation and schedule.is_scaled_down:
+            elif not any_in_hibernation and primary.is_scaled_down:
                 # Time to scale up
-                logger.debug(f"Scaling up {schedule.namespace}/{schedule.deployment_name}")
+                logger.debug(f"Scaling up {namespace}/{deployment_name}")
 
                 # Scale up to original replicas
-                replicas_to_restore = schedule.original_replicas or 1
+                replicas_to_restore = primary.original_replicas or 1
                 await run_in_threadpool(
                     k8s_client.scale_up,
-                    schedule.namespace,
-                    schedule.deployment_name,
+                    namespace,
+                    deployment_name,
                     replicas_to_restore,
                 )
 
-                # Update schedule state
-                schedule.is_scaled_down = False
-                schedule.last_scaled_at = get_current_time()
-                schedule.updated_at = get_current_time()
+                # Update state on primary schedule
+                primary.is_scaled_down = False
+                primary.last_scaled_at = get_current_time()
+                primary.updated_at = get_current_time()
 
-                logger.info(f"Scaled up {schedule.namespace}/{schedule.deployment_name} to {replicas_to_restore} replicas")
+                logger.info(f"Scaled up {namespace}/{deployment_name} to {replicas_to_restore} replicas")
 
         except Exception as e:
-            logger.error(f"Error processing schedule for {schedule.namespace}/{schedule.deployment_name}: {e}")
-
-    def should_scale_down(self, scale_down_time: str, current_time: str) -> bool:
-        """Check if it's time to scale down"""
-        return current_time == scale_down_time
-
-    def should_scale_up(self, scale_up_time: str, current_time: str) -> bool:
-        """Check if it's time to scale up"""
-        return current_time == scale_up_time
+            logger.error(f"Error processing deployment {namespace}/{deployment_name}: {e}")
 
     def is_in_hibernation_period(self, scale_down_time: str, scale_up_time: str, current_time: str) -> bool:
         """Check if current time is within the hibernation period (scale-down to scale-up)

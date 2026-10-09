@@ -128,40 +128,37 @@ async def create_schedule(
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Deployment not found: {str(e)}")
 
-    # Check if schedule already exists for this deployment
+    # Create schedule (multiple schedules per deployment are now allowed)
+    # Check if any existing schedule for this deployment has deployment state
     result = await db.execute(
         select(ScheduleDB).where(
             ScheduleDB.namespace == schedule_data.namespace,
             ScheduleDB.deployment_name == schedule_data.deployment_name,
         )
     )
-    existing = result.scalar_one_or_none()
+    existing_schedules = result.scalars().all()
 
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "A schedule already exists for this deployment",
-                "suggestion": "Please edit the existing schedule instead of creating a new one",
-                "existing_schedule": {
-                    "id": existing.id,
-                    "scale_down_time": existing.scale_down_time,
-                    "scale_up_time": existing.scale_up_time,
-                    "enabled": existing.enabled,
-                },
-            },
-        )
+    # Get deployment state from first existing schedule if any
+    original_replicas = current_replicas
+    is_scaled_down = False
+    last_scaled_at = None
 
-    # Create schedule
+    if existing_schedules:
+        first = existing_schedules[0]
+        if first.original_replicas is not None:
+            original_replicas = first.original_replicas
+        is_scaled_down = first.is_scaled_down
+        last_scaled_at = first.last_scaled_at
+
     schedule = ScheduleDB(
         namespace=schedule_data.namespace,
         deployment_name=schedule_data.deployment_name,
         scale_down_time=schedule_data.scale_down_time,
         scale_up_time=schedule_data.scale_up_time,
-        original_replicas=current_replicas,
+        original_replicas=original_replicas,
         enabled=True,
-        is_scaled_down=False,
-        last_scaled_at=None,
+        is_scaled_down=is_scaled_down,
+        last_scaled_at=last_scaled_at,
     )
 
     db.add(schedule)

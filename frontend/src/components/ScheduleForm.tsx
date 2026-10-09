@@ -23,7 +23,6 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingDeployments, setLoadingDeployments] = useState(false);
   const [error, setError] = useState('');
-  const [existingScheduleForDeployment, setExistingScheduleForDeployment] = useState<Schedule | null>(null);
 
   const isEditMode = !!existingSchedule;
 
@@ -39,15 +38,6 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
       setSelectedDeployment('');
     }
   }, [selectedNamespace]);
-
-  useEffect(() => {
-    // Only check for duplicates in create mode when deployment is selected
-    if (!isEditMode && selectedDeployment && selectedNamespace) {
-      checkForExistingSchedule();
-    } else {
-      setExistingScheduleForDeployment(null);
-    }
-  }, [selectedDeployment, selectedNamespace, isEditMode]);
 
   const loadNamespaces = async () => {
     try {
@@ -71,35 +61,12 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
     }
   };
 
-  const checkForExistingSchedule = async () => {
-    try {
-      const allSchedules = await schedulesAPI.getAll();
-
-      // Find if there's already a schedule for this namespace/deployment
-      const existingSchedule = allSchedules.find(
-        (s) =>
-          s.namespace === selectedNamespace &&
-          s.deployment_name === selectedDeployment
-      );
-
-      setExistingScheduleForDeployment(existingSchedule || null);
-    } catch (err: any) {
-      // Silently fail - this is just a warning check
-      console.error('Failed to check for existing schedule:', err);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     if (!selectedDeployment) {
       setError('Please select a deployment');
-      return;
-    }
-
-    if (!isEditMode && existingScheduleForDeployment) {
-      setError('A schedule already exists for this deployment. Please edit the existing schedule instead.');
       return;
     }
 
@@ -136,37 +103,6 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
-        </div>
-      )}
-
-      {existingScheduleForDeployment && !isEditMode && (
-        <div className="bg-yellow-50 border border-yellow-200 px-3 sm:px-4 py-3 rounded-lg">
-          <div className="flex items-start gap-2 sm:gap-3">
-            <svg className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            <div className="flex-1 min-w-0">
-              <h4 className="text-xs sm:text-sm font-medium text-yellow-800 mb-1">
-                Un schedule existe déjà pour ce déploiement
-              </h4>
-              <p className="text-xs sm:text-sm text-yellow-700 mb-2 break-words">
-                Le déploiement <span className="font-semibold">{existingScheduleForDeployment.deployment_name}</span> dans le namespace{' '}
-                <span className="font-semibold">{existingScheduleForDeployment.namespace}</span> a déjà un schedule configuré:
-              </p>
-              <div className="text-xs sm:text-sm text-yellow-700 space-y-1 ml-2 sm:ml-4">
-                <div>• Scale Down: <span className="font-medium">{existingScheduleForDeployment.scale_down_time}</span></div>
-                <div>• Scale Up: <span className="font-medium">{existingScheduleForDeployment.scale_up_time}</span></div>
-                <div>• Status: {existingScheduleForDeployment.enabled ? (
-                  <span className="font-medium text-green-700">Activé</span>
-                ) : (
-                  <span className="font-medium text-gray-600">Désactivé</span>
-                )}</div>
-              </div>
-              <p className="text-xs sm:text-sm text-yellow-700 mt-2">
-                Vous devez éditer le schedule existant au lieu d'en créer un nouveau.
-              </p>
-            </div>
-          </div>
         </div>
       )}
 
@@ -335,7 +271,7 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
       <div className="flex flex-col sm:flex-row gap-3 pt-4">
         <button
           type="submit"
-          disabled={loading || (!isEditMode && !!existingScheduleForDeployment)}
+          disabled={loading}
           className="flex-1 inline-flex justify-center items-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Schedule' : 'Create Schedule')}

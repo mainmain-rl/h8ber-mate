@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.database.models import ScheduleDB
+from src.schedules.db import ScheduleDB
 
 
 @pytest.fixture

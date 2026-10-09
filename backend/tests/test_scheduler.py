@@ -2,13 +2,13 @@
 Tests for the SchedulerService class.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.schedules.services import SchedulerService
-from src.shared.database.models import ScheduleDB
+from src.schedules.db import ScheduleDB
 from src.shared.settings import settings
 
 
@@ -33,100 +33,145 @@ def test_scheduler_initialization():
     assert service.scheduler is not None
 
 
-def test_schedule_down_time_calculation():
-    """Test the should_scale_down method."""
-    service = SchedulerService()
-
-    # Test exact match
-    assert service.should_scale_down("15:30", "15:30") is True
-
-    # Test no match
-    assert service.should_scale_down("15:30", "16:00") is False
-    assert service.should_scale_down("15:30", "15:29") is False
-    assert service.should_scale_down("15:30", "15:31") is False
+def test_is_in_hibernation_period_same_day(scheduler_service):
+    """Test is_in_hibernation_period for same-day periods."""
+    # Same-day hibernation (e.g., lunch 13:00-14:00)
+    assert scheduler_service.is_in_hibernation_period("13:00", "14:00", "13:30") is True
+    assert scheduler_service.is_in_hibernation_period("13:00", "14:00", "12:59") is False
+    assert scheduler_service.is_in_hibernation_period("13:00", "14:00", "14:00") is False
+    assert scheduler_service.is_in_hibernation_period("13:00", "14:00", "14:01") is False
 
 
-def test_schedule_up_time_calculation():
-    """Test the should_scale_up method."""
-    service = SchedulerService()
-
-    # Test exact match
-    assert service.should_scale_up("08:00", "08:00") is True
-
-    # Test no match
-    assert service.should_scale_up("08:00", "07:59") is False
-    assert service.should_scale_up("08:00", "08:01") is False
+def test_is_in_hibernation_period_overnight(scheduler_service):
+    """Test is_in_hibernation_period for overnight periods."""
+    # Overnight hibernation (e.g., night 20:00-08:00)
+    assert scheduler_service.is_in_hibernation_period("20:00", "08:00", "21:30") is True
+    assert scheduler_service.is_in_hibernation_period("20:00", "08:00", "23:59") is True
+    assert scheduler_service.is_in_hibernation_period("20:00", "08:00", "00:15") is True
+    assert scheduler_service.is_in_hibernation_period("20:00", "08:00", "07:59") is True
+    assert scheduler_service.is_in_hibernation_period("20:00", "08:00", "08:00") is False
+    assert scheduler_service.is_in_hibernation_period("20:00", "08:00", "09:30") is False
+    assert scheduler_service.is_in_hibernation_period("20:00", "08:00", "19:59") is False
 
 
 @pytest.mark.asyncio
-async def test_process_schedule_scale_down(mock_db_session, scheduler_service):
-    """Test processing a schedule that should scale down."""
-    # Mock dependencies
+async def test_process_deployment_scale_down(mock_db_session, scheduler_service):
+    """Test processing a deployment that should scale down."""
     mock_k8s_client = MagicMock()
     mock_k8s_client.scale_down = AsyncMock()
-    mock_schedule = ScheduleDB(
+
+    # Two schedules for same deployment (night + lunch)
+    schedule1 = ScheduleDB(
         id=1,
         namespace="test-ns",
         deployment_name="test-deployment",
         scale_down_time="22:00",
         scale_up_time="08:00",
         enabled=True,
-        is_scaled_down=False,
+    )
+    schedule2 = ScheduleDB(
+        id=2,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
+        enabled=True,
     )
 
-    # Mock current time to be scale-down time
     with patch("src.schedules.services.datetime") as mock_dt:
         mock_now = datetime.now().replace(hour=22, minute=0)
         mock_dt.now.return_value = mock_now
-
-        # Mock get_deployment_replicas to return 3
         mock_k8s_client.get_deployment_replicas.return_value = 3
 
-        # Test scale down
-        await scheduler_service.process_schedule(mock_db_session, mock_schedule, "22:00", mock_k8s_client)
+        # Test scale down triggered by first schedule (night)
+        await scheduler_service.process_deployment(mock_db_session, [schedule1, schedule2], "22:00", mock_k8s_client)
 
-        # Verify scale_down was called
         mock_k8s_client.scale_down.assert_called_once_with("test-ns", "test-deployment")
-        assert mock_schedule.is_scaled_down is True
-        assert mock_schedule.original_replicas == 3
+        # Primary schedule (first with original_replicas or first) should be updated
+        assert schedule1.is_scaled_down is True
+        assert schedule1.original_replicas == 3
 
 
 @pytest.mark.asyncio
-async def test_process_schedule_scale_up(mock_db_session, scheduler_service):
-    """Test processing a schedule that should scale up."""
-    # Mock dependencies
+async def test_process_deployment_scale_down_lunch(mock_db_session, scheduler_service):
+    """Test processing a deployment that should scale down due to lunch schedule."""
     mock_k8s_client = MagicMock()
-    mock_k8s_client.scale_up = AsyncMock()
-    mock_schedule = ScheduleDB(
+    mock_k8s_client.scale_down = AsyncMock()
+
+    schedule1 = ScheduleDB(
         id=1,
         namespace="test-ns",
         deployment_name="test-deployment",
         scale_down_time="22:00",
         scale_up_time="08:00",
         enabled=True,
-        is_scaled_down=True,  # Already scaled down
-        original_replicas=3,
+    )
+    schedule2 = ScheduleDB(
+        id=2,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
+        enabled=True,
     )
 
-    # Mock current time to be scale-up time
     with patch("src.schedules.services.datetime") as mock_dt:
-        mock_now = datetime.now().replace(hour=8, minute=0)
+        mock_now = datetime.now().replace(hour=13, minute=30)
         mock_dt.now.return_value = mock_now
+        mock_k8s_client.get_deployment_replicas.return_value = 5
 
-        # Test scale up
-        await scheduler_service.process_schedule(mock_db_session, mock_schedule, "08:00", mock_k8s_client)
+        # Test scale down triggered by second schedule (lunch)
+        await scheduler_service.process_deployment(mock_db_session, [schedule1, schedule2], "13:30", mock_k8s_client)
 
-        # Verify scale_up was called with original replicas
-        mock_k8s_client.scale_up.assert_called_once_with("test-ns", "test-deployment", 3)
-        assert mock_schedule.is_scaled_down is False
+        mock_k8s_client.scale_down.assert_called_once_with("test-ns", "test-deployment")
+        assert schedule1.is_scaled_down is True
+        assert schedule1.original_replicas == 5
 
 
 @pytest.mark.asyncio
-async def test_process_schedule_no_action(mock_db_session, scheduler_service):
-    """Test processing a schedule when no action should be taken."""
-    # Mock dependencies
+async def test_process_deployment_scale_up(mock_db_session, scheduler_service):
+    """Test processing a deployment that should scale up when no schedule is in hibernation."""
     mock_k8s_client = MagicMock()
-    mock_schedule = ScheduleDB(
+    mock_k8s_client.scale_up = AsyncMock()
+
+    schedule1 = ScheduleDB(
+        id=1,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="22:00",
+        scale_up_time="08:00",
+        enabled=True,
+        is_scaled_down=True,
+        original_replicas=3,
+    )
+    schedule2 = ScheduleDB(
+        id=2,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
+        enabled=True,
+        is_scaled_down=True,
+        original_replicas=3,
+    )
+
+    with patch("src.schedules.services.datetime") as mock_dt:
+        mock_now = datetime.now().replace(hour=10, minute=0)
+        mock_dt.now.return_value = mock_now
+
+        # Test scale up - no schedule in hibernation at 10:00
+        await scheduler_service.process_deployment(mock_db_session, [schedule1, schedule2], "10:00", mock_k8s_client)
+
+        mock_k8s_client.scale_up.assert_called_once_with("test-ns", "test-deployment", 3)
+        assert schedule1.is_scaled_down is False
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_no_action(mock_db_session, scheduler_service):
+    """Test processing a deployment when no action should be taken."""
+    mock_k8s_client = MagicMock()
+
+    schedule1 = ScheduleDB(
         id=1,
         namespace="test-ns",
         deployment_name="test-deployment",
@@ -135,131 +180,108 @@ async def test_process_schedule_no_action(mock_db_session, scheduler_service):
         enabled=True,
         is_scaled_down=False,
     )
+    schedule2 = ScheduleDB(
+        id=2,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
+        enabled=True,
+        is_scaled_down=False,
+    )
 
-    # Mock current time to be outside scale times (not yet 22:00)
     with patch("src.schedules.services.datetime") as mock_dt:
         mock_now = datetime.now().replace(hour=18, minute=0)
         mock_dt.now.return_value = mock_now
 
-        # Test no action
-        await scheduler_service.process_schedule(mock_db_session, mock_schedule, "18:00", mock_k8s_client)
+        # Test no action - not in any hibernation period
+        await scheduler_service.process_deployment(mock_db_session, [schedule1, schedule2], "18:00", mock_k8s_client)
 
-        # Verify no scaling operations were called
         assert not mock_k8s_client.scale_down.called
         assert not mock_k8s_client.scale_up.called
 
 
 @pytest.mark.asyncio
-async def test_process_schedule_disabled(mock_db_session, scheduler_service):
-    """Test processing a disabled schedule."""
-    # Mock dependencies
+async def test_process_deployment_disabled_schedule_ignored(mock_db_session, scheduler_service):
+    """Test that disabled schedules don't trigger scaling."""
     mock_k8s_client = MagicMock()
     mock_k8s_client.scale_down = AsyncMock()
-    mock_schedule = ScheduleDB(
+
+    schedule1 = ScheduleDB(
         id=1,
         namespace="test-ns",
         deployment_name="test-deployment",
         scale_down_time="22:00",
         scale_up_time="08:00",
+        enabled=True,
+    )
+    schedule2 = ScheduleDB(
+        id=2,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
         enabled=False,  # Disabled
-        is_scaled_down=False,
     )
 
-    # Mock current time to be scale-down time
     with patch("src.schedules.services.datetime") as mock_dt:
-        mock_now = datetime.now().replace(hour=22, minute=0)
+        mock_now = datetime.now().replace(hour=13, minute=30)
         mock_dt.now.return_value = mock_now
+        mock_k8s_client.get_deployment_replicas.return_value = 2
 
-        # Test no action due to disabled schedule
-        await scheduler_service.process_schedule(mock_db_session, mock_schedule, "22:00", mock_k8s_client)
+        # Lunch schedule is disabled, night schedule not in hibernation at 13:30
+        await scheduler_service.process_deployment(mock_db_session, [schedule1, schedule2], "13:30", mock_k8s_client)
 
-        # Verify no scaling operations were called
+        # Should not scale down because only disabled schedule is in hibernation
         assert not mock_k8s_client.scale_down.called
-        assert not mock_k8s_client.scale_up.called
 
 
 @pytest.mark.asyncio
-async def test_process_schedule_already_scaled_down(mock_db_session, scheduler_service):
-    """Test processing a schedule that's already scaled down."""
-    # Mock dependencies
+async def test_process_deployment_already_scaled_down(mock_db_session, scheduler_service):
+    """Test processing a deployment that's already scaled down."""
     mock_k8s_client = MagicMock()
-    mock_schedule = ScheduleDB(
+
+    schedule1 = ScheduleDB(
         id=1,
         namespace="test-ns",
         deployment_name="test-deployment",
         scale_down_time="22:00",
         scale_up_time="08:00",
         enabled=True,
-        is_scaled_down=True,  # Already scaled down
+        is_scaled_down=True,
+        original_replicas=3,
+    )
+    schedule2 = ScheduleDB(
+        id=2,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
+        enabled=True,
+        is_scaled_down=True,
+        original_replicas=3,
     )
 
-    # Mock current time to be scale-down time (again)
     with patch("src.schedules.services.datetime") as mock_dt:
         mock_now = datetime.now().replace(hour=22, minute=0)
         mock_dt.now.return_value = mock_now
 
-        # Test no action since already scaled down
-        await scheduler_service.process_schedule(mock_db_session, mock_schedule, "22:00", mock_k8s_client)
+        # Already scaled down, should not scale again
+        await scheduler_service.process_deployment(mock_db_session, [schedule1, schedule2], "22:00", mock_k8s_client)
 
-        # Verify no scaling operations were called
         assert not mock_k8s_client.scale_down.called
         assert not mock_k8s_client.scale_up.called
 
 
 @pytest.mark.asyncio
-async def test_process_schedule_in_hibernation_period(mock_db_session, scheduler_service):
-    """Test that schedule processing works correctly while in hibernation period."""
-    # Mock dependencies
-    mock_k8s_client = MagicMock()
-    mock_k8s_client.scale_up = AsyncMock()
-    mock_schedule = ScheduleDB(
-        id=1,
-        namespace="test-ns",
-        deployment_name="test-deployment",
-        scale_down_time="20:00",  # Evening
-        scale_up_time="08:00",  # Morning (next day)
-        enabled=True,
-        is_scaled_down=False,
-    )
-
-    # Test various times during hibernation period (20:00-08:00)
-    test_times = ["21:30", "22:45", "23:59", "00:15", "07:59"]
-
-    for current_time in test_times:
-        mock_k8s_client.reset_mock()
-
-        # Mock current time
-        with patch("src.schedules.services.datetime") as mock_dt:
-            hour, minute = map(int, current_time.split(":"))
-            mock_now = datetime.now().replace(hour=hour, minute=minute)
-            mock_dt.now.return_value = mock_now
-            mock_k8s_client.get_deployment_replicas.return_value = 2
-
-            # Process schedule
-            await scheduler_service.process_schedule(mock_db_session, mock_schedule, current_time, mock_k8s_client)
-
-            # First time in hibernation period should scale down
-            if current_time == "21:30":
-                mock_k8s_client.scale_down.assert_called_once_with("test-ns", "test-deployment")
-                mock_k8s_client.scale_up.assert_not_called()
-            else:
-                # Subsequent times during hibernation should not scale (already scaled down)
-                mock_k8s_client.scale_down.assert_not_called()
-                mock_k8s_client.scale_up.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_check_schedules(mock_db_session, scheduler_service):
-    """Test the check_schedules method with multiple schedules."""
-    # Mock dependencies
+async def test_check_schedules_multiple_deployments(mock_db_session, scheduler_service):
+    """Test the check_schedules method with multiple deployments and schedules."""
     mock_k8s_client = MagicMock()
     mock_k8s_client.scale_up = AsyncMock()
     mock_k8s_client.scale_down = AsyncMock()
-    mock_k8s_client.scale_up = AsyncMock()
-    mock_k8s_client.scale_down = AsyncMock()
 
-    # Create multiple schedules with different states and times
-    active_schedule_1 = ScheduleDB(
+    # Deployment 1: two schedules (night + lunch)
+    dep1_sched1 = ScheduleDB(
         id=1,
         namespace="ns1",
         deployment_name="deploy1",
@@ -268,19 +290,30 @@ async def test_check_schedules(mock_db_session, scheduler_service):
         enabled=True,
         is_scaled_down=False,
     )
-
-    active_schedule_2 = ScheduleDB(
+    dep1_sched2 = ScheduleDB(
         id=2,
+        namespace="ns1",
+        deployment_name="deploy1",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
+        enabled=True,
+        is_scaled_down=False,
+    )
+
+    # Deployment 2: one schedule
+    dep2_sched1 = ScheduleDB(
+        id=3,
         namespace="ns2",
         deployment_name="deploy2",
-        scale_down_time="15:00",  # Lunch break
+        scale_down_time="15:00",
         scale_up_time="16:00",
         enabled=True,
         is_scaled_down=False,
     )
 
-    disabled_schedule = ScheduleDB(
-        id=3,
+    # Deployment 3: disabled schedule
+    dep3_sched1 = ScheduleDB(
+        id=4,
         namespace="ns3",
         deployment_name="deploy3",
         scale_down_time="20:00",
@@ -291,43 +324,92 @@ async def test_check_schedules(mock_db_session, scheduler_service):
 
     # Add schedules to db mock
     result_mock = MagicMock()
-    result_mock.scalars.return_value.all.return_value = [active_schedule_1, active_schedule_2, disabled_schedule]
+    result_mock.scalars.return_value.all.return_value = [dep1_sched1, dep1_sched2, dep2_sched1, dep3_sched1]
     mock_db_session.execute.return_value = result_mock
 
-    # Mock current time to be 22:00 (evening for first schedule, pre-lunch for second)
-    with patch("src.schedules.services.datetime") as mock_dt:
-        mock_now = datetime.now().replace(hour=22, minute=0)
-        mock_dt.now.return_value = mock_now
+    # Mock replicas for each deployment
+    mock_k8s_client.get_deployment_replicas.side_effect = [3, 2]
 
-        # Mock replicas for each deployment
-        mock_k8s_client.get_deployment_replicas.side_effect = [3, 2]
+    # Process all schedules with mocked time
+    await scheduler_service.check_schedules(db=mock_db_session, k8s_client=mock_k8s_client, current_time="22:00")
 
-        # Process all schedules
-        await scheduler_service.check_schedules()
-
-        # Verify scale operations were called correctly
-        # First schedule (ns1/deploy1) should scale down at 22:00
-        mock_k8s_client.scale_down.assert_any_call("ns1", "deploy1")
-        # Second schedule (ns2/deploy2) should not scale at 22:00
-        mock_k8s_client.scale_up.assert_not_called()
-        # Third schedule (ns3/deploy3) should not scale (disabled)
-        assert mock_k8s_client.scale_down.call_count == 1  # Only first schedule should be scaled down
+    # Verify scale operations were called correctly
+    # deploy1 should scale down (night schedule triggers)
+    mock_k8s_client.scale_down.assert_any_call("ns1", "deploy1")
+    # deploy2 should NOT scale (15:00-16:00, current is 22:00)
+    # deploy3 should NOT scale (disabled)
+    assert mock_k8s_client.scale_down.call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_process_schedule_scale_up(mock_db_session, scheduler_service):
-    """Test processing a schedule that should scale up."""
-    service = SchedulerService()
+async def test_check_schedules_scale_up(mock_db_session, scheduler_service):
+    """Test check_schedules scales up when no hibernation periods active."""
+    mock_k8s_client = MagicMock()
+    mock_k8s_client.scale_up = AsyncMock()
+    mock_k8s_client.scale_down = AsyncMock()
 
-    # Test same-day hibernation
-    assert service.is_in_hibernation_period("13:00", "14:00", "13:30") is True
-    assert service.is_in_hibernation_period("13:00", "14:00", "12:59") is False
-    assert service.is_in_hibernation_period("13:00", "14:00", "14:01") is False
+    schedule1 = ScheduleDB(
+        id=1,
+        namespace="ns1",
+        deployment_name="deploy1",
+        scale_down_time="22:00",
+        scale_up_time="08:00",
+        enabled=True,
+        is_scaled_down=True,
+        original_replicas=3,
+    )
 
-    # Test overnight hibernation
-    assert service.is_in_hibernation_period("20:00", "08:00", "21:30") is True
-    assert service.is_in_hibernation_period("20:00", "08:00", "7:59") is True
-    assert service.is_in_hibernation_period("20:00", "08:00", "9:30") is False
-    assert service.is_in_hibernation_period("20:00", "08:00", "19:59") is False
-    assert service.is_in_hibernation_period("20:00", "08:00", "07:59") is True  # Edge case
-    assert service.is_in_hibernation_period("20:00", "08:00", "07:59") is True  # Testing midnight crossing
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = [schedule1]
+    mock_db_session.execute.return_value = result_mock
+
+    # Process with mocked time (10:00 - outside hibernation period)
+    await scheduler_service.check_schedules(db=mock_db_session, k8s_client=mock_k8s_client, current_time="10:00")
+
+    mock_k8s_client.scale_up.assert_called_once_with("ns1", "deploy1", 3)
+    assert schedule1.is_scaled_down is False
+
+
+@pytest.mark.asyncio
+async def test_process_deployment_shared_state(mock_db_session, scheduler_service):
+    """Test that deployment state is shared across schedules for same deployment."""
+    mock_k8s_client = MagicMock()
+    mock_k8s_client.scale_down = AsyncMock()
+
+    # First schedule created - gets original_replicas
+    schedule1 = ScheduleDB(
+        id=1,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="22:00",
+        scale_up_time="08:00",
+        enabled=True,
+        original_replicas=3,  # Already has state
+        is_scaled_down=False,
+    )
+    # Second schedule created later - no state yet
+    schedule2 = ScheduleDB(
+        id=2,
+        namespace="test-ns",
+        deployment_name="test-deployment",
+        scale_down_time="13:00",
+        scale_up_time="14:00",
+        enabled=True,
+        original_replicas=None,
+        is_scaled_down=False,
+    )
+
+    with patch("src.schedules.services.datetime") as mock_dt:
+        mock_now = datetime.now().replace(hour=22, minute=0)
+        mock_dt.now.return_value = mock_now
+        mock_k8s_client.get_deployment_replicas.return_value = 5
+
+        # Process - schedule1 is primary (has original_replicas)
+        await scheduler_service.process_deployment(mock_db_session, [schedule1, schedule2], "22:00", mock_k8s_client)
+
+        mock_k8s_client.scale_down.assert_called_once_with("test-ns", "test-deployment")
+        # Primary schedule (schedule1) should be updated
+        assert schedule1.is_scaled_down is True
+        assert schedule1.original_replicas == 3  # Keeps original value
+        # Second schedule should not have state (state is on primary)
+        assert schedule2.original_replicas is None

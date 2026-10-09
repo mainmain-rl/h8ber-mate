@@ -9,8 +9,8 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.database.database import get_db, hash_password, verify_password
-from src.shared.database.models import UserDB
+from src.shared import get_db, UserDB
+from src.shared.database.database import hash_password, verify_password
 
 from .auth_simple import (
     authenticate_user,

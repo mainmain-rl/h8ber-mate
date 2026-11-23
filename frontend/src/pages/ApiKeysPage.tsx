@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
-import { apiKeysAPI } from '../services/api';
+import { apiKeysAPI, getApiErrorMessage } from '../services/api';
 import type { ApiKey, ApiKeyCreate, ApiKeyCreated } from '../types';
 
 export const ApiKeysPage: React.FC = () => {
@@ -26,8 +26,8 @@ export const ApiKeysPage: React.FC = () => {
       const keys = await apiKeysAPI.getAll();
       setApiKeys(keys);
       setError('');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load API keys');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to load API keys'));
     } finally {
       setLoading(false);
     }
@@ -51,8 +51,8 @@ export const ApiKeysPage: React.FC = () => {
       const newKey = await apiKeysAPI.create(createData);
       setCreatedKey(newKey);
       loadApiKeys();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create API key');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to create API key'));
     }
   };
 
@@ -62,8 +62,8 @@ export const ApiKeysPage: React.FC = () => {
     try {
       await apiKeysAPI.delete(keyId);
       loadApiKeys();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete API key');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to delete API key'));
     }
   };
 

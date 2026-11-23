@@ -1,11 +1,15 @@
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from kubernetes import client, config
-from kubernetes.client.rest import ApiException
 from kubernetes.client.models.v1_deployment import V1Deployment
-from src.schedules.models import DeploymentInfo
+from kubernetes.client.rest import ApiException
+
 from src.shared.settings import settings
+
+if TYPE_CHECKING:
+    from src.schedules import DeploymentInfo
 
 
 class K8sClient:
@@ -52,8 +56,9 @@ class K8sClient:
         except ApiException:
             return False
 
-    def list_deployments(self, namespace: str) -> list[DeploymentInfo]:
+    def list_deployments(self, namespace: str) -> list["DeploymentInfo"]:
         """List all deployments in a namespace"""
+        from src.schedules import DeploymentInfo
         try:
             deployments = self.apps_v1.list_namespaced_deployment(namespace)
             result = []

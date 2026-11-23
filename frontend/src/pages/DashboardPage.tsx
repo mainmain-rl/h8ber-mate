@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
-import { schedulesAPI } from '../services/api';
+import { getApiErrorMessage, schedulesAPI } from '../services/api';
 import type { Schedule } from '../types';
 import { ScheduleList } from '../components/ScheduleList';
 import { ScheduleForm } from '../components/ScheduleForm';
@@ -44,8 +44,8 @@ export const DashboardPage: React.FC = () => {
       // Initialize all namespaces as selected
       const allNamespaces = new Set(schedulesData.map(s => s.namespace));
       setSelectedNamespaces(allNamespaces);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load data');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to load data'));
     } finally {
       setLoading(false);
     }

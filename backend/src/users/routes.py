@@ -4,10 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.audit import get_client_ip, log_action
-from src.shared.auth.auth_simple import get_current_admin_user, get_current_user
-from src.shared.database.database import get_db, hash_password
-from src.shared.database.models import UserDB, UserNamespaceDB
+from src.shared import (
+    UserDB,
+    UserNamespaceDB,
+    get_client_ip,
+    get_current_admin_user,
+    get_current_user,
+    get_db,
+    hash_password,
+    log_action,
+)
 
 from .models import UserCreate, UserListResponse, UserResponse, UserUpdate
 

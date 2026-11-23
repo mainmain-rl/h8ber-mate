@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
-import { usersAPI, k8sAPI } from '../services/api';
+import { getApiErrorMessage, usersAPI, k8sAPI } from '../services/api';
 import type { User, UserCreate, UserUpdate } from '../types';
 
 export const UsersPage: React.FC = () => {
@@ -30,8 +30,8 @@ export const UsersPage: React.FC = () => {
       const response = await usersAPI.getAll();
       setUsers(response.users);
       setError('');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load users');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to load users'));
     } finally {
       setLoading(false);
     }
@@ -89,8 +89,8 @@ export const UsersPage: React.FC = () => {
       }
       setShowModal(false);
       loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save user');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to save user'));
     }
   };
 
@@ -100,8 +100,8 @@ export const UsersPage: React.FC = () => {
     try {
       await usersAPI.delete(userId);
       loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete user');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to delete user'));
     }
   };
 

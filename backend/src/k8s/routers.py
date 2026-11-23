@@ -3,9 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from starlette.concurrency import run_in_threadpool
 
-from src.schedules.models import DeploymentInfo
-from src.shared.auth.auth_simple import check_namespace_access, filter_namespaces_by_access, get_current_user
-from src.shared.settings import settings
+from src.schedules import DeploymentInfo
+from src.shared import check_namespace_access, filter_namespaces_by_access, get_current_user, settings
 
 from .services import K8sClient, get_k8s_client
 

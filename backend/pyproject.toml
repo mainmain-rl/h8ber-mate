@@ -35,7 +35,6 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "ruff>=0.8.0",
-    "pytest>=8.4.2",
 ]
 
 [tool.ruff]
@@ -56,6 +55,3 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-
-[flake8]
-max-line-length = 130

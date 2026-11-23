@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { authAPI } from '../services/api';
+import { authAPI, getApiErrorMessage } from '../services/api';
 
 export const ChangePasswordPage: React.FC = () => {
   const navigate = useNavigate();
@@ -46,12 +46,8 @@ export const ChangePasswordPage: React.FC = () => {
       setTimeout(() => {
         navigate('/dashboard');
       }, 2000);
-    } catch (err: any) {
-      if (err.response?.data?.detail) {
-        setError(err.response.data.detail);
-      } else {
-        setError('Failed to change password. Please try again.');
-      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to change password. Please try again.'));
     } finally {
       setLoading(false);
     }

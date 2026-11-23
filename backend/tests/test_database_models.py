@@ -2,25 +2,33 @@
 Tests for database models.
 """
 
-from datetime import datetime, timedelta
-
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from src.shared.database.models import ScheduleDB
+from src.schedules.db import ScheduleDB, get_current_time
 
 
 @pytest.fixture
-def mock_db_session():
-    """Mock database session fixture."""
-    return AsyncSession()
+async def db_session():
+    """Create an in-memory database session for model behavior tests."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(ScheduleDB.__table__.create)
+
+    async with AsyncSession(engine) as session:
+        yield session
+
+    await engine.dispose()
 
 
-def test_schedule_model_creation():
+@pytest.mark.asyncio
+async def test_schedule_model_creation(db_session):
     """Test creating a ScheduleDB model."""
     schedule = ScheduleDB(
         namespace="test-ns", deployment_name="test-deployment", scale_down_time="22:00", scale_up_time="08:00"
     )
+    db_session.add(schedule)
+    await db_session.flush()
 
     assert schedule.namespace == "test-ns"
     assert schedule.deployment_name == "test-deployment"
@@ -31,21 +39,26 @@ def test_schedule_model_creation():
     assert schedule.original_replicas is None
 
 
-def test_schedule_model_defaults():
+@pytest.mark.asyncio
+async def test_schedule_model_defaults(db_session):
     """Test default values in ScheduleDB model."""
     schedule = ScheduleDB(
         namespace="test-ns", deployment_name="test-deployment", scale_down_time="20:00", scale_up_time="08:00"
     )
+    before_flush = get_current_time()
+    db_session.add(schedule)
+    await db_session.flush()
 
-    # Check default values
     assert schedule.enabled is True
     assert schedule.is_scaled_down is False
     assert schedule.original_replicas is None
 
-    # Check timestamps are set (within tolerance)
-    now = datetime.now()
-    assert abs((schedule.created_at - now).total_seconds()) < 60
-    assert abs((schedule.updated_at - now).total_seconds()) < 60
+    assert schedule.created_at is not None
+    assert schedule.updated_at is not None
+    assert before_flush <= schedule.created_at
+    after_flush = get_current_time()
+    assert schedule.created_at <= after_flush
+    assert schedule.updated_at <= after_flush
 
 
 def test_schedule_model_unique_constraint():
@@ -62,25 +75,20 @@ def test_schedule_model_unique_constraint():
 
 
 @pytest.mark.asyncio
-async def test_schedule_model_timestamps(mock_db_session):
+async def test_schedule_model_timestamps(db_session):
     """Test timestamp behavior in ScheduleDB model."""
-    # Create a schedule
     schedule = ScheduleDB(
         namespace="test-ns", deployment_name="test-deployment", scale_down_time="20:00", scale_up_time="08:00"
     )
+    db_session.add(schedule)
+    await db_session.flush()
 
-    # Check initial timestamps
     created_at = schedule.created_at
     updated_at = schedule.updated_at
 
-    # Update some fields
     schedule.scale_down_time = "21:00"
-    schedule.updated_at = datetime.now()
-
-    # Check that updated_at changed
+    await db_session.flush()
     assert schedule.updated_at > updated_at
-
-    # Check that created_at remained the same
     assert schedule.created_at == created_at
 
 
@@ -110,9 +118,14 @@ def test_schedule_model_time_format():
         assert schedule.scale_up_time == scale_up
 
 
-def test_schedule_model_state_transitions():
+@pytest.mark.asyncio
+async def test_schedule_model_state_transitions(db_session):
     """Test state transitions in ScheduleDB model."""
-    schedule = ScheduleDB(namespace="test-ns", deployment_name="test-deployment")
+    schedule = ScheduleDB(
+        namespace="test-ns", deployment_name="test-deployment", scale_down_time="22:00", scale_up_time="08:00"
+    )
+    db_session.add(schedule)
+    await db_session.flush()
 
     # Initial state
     assert schedule.is_scaled_down is False

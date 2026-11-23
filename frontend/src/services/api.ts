@@ -1,4 +1,5 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
+import type { AxiosError } from 'axios';
 import type {
   LoginRequest,
   Token,
@@ -16,6 +17,12 @@ import type {
   ApiKeyCreated,
 } from '../types';
 
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _retry?: boolean;
+  }
+}
+
 // Create axios instance
 const api = axios.create({
   baseURL: '/api',
@@ -23,6 +30,17 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+export const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (axios.isAxiosError<ApiError>(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string' && detail) {
+      return detail;
+    }
+  }
+
+  return fallback;
+};
 
 // Request interceptor to add auth token
 api.interceptors.request.use(
@@ -43,8 +61,8 @@ api.interceptors.response.use(
     const originalRequest = error.config;
 
     // If error is 401 and we haven't tried to refresh yet
-    if (error.response?.status === 401 && originalRequest && !(originalRequest as any)._retry) {
-      (originalRequest as any)._retry = true;
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
 
       try {
         // Try to refresh the token

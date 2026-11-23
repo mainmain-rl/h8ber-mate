@@ -73,7 +73,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 async def create_default_admin():
     """Create default admin user if no admin exists"""
-    from src.shared.database.models import UserDB
+    from src.shared import UserDB
 
     async with AsyncSessionLocal() as session:
         # Check if any admin user exists

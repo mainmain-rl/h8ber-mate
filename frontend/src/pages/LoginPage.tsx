@@ -1,6 +1,7 @@
 import React, { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/auth-context';
+import { getApiErrorMessage } from '../services/api';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -19,8 +20,8 @@ export const LoginPage: React.FC = () => {
     try {
       await login({ email, password });
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid email or password');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Invalid email or password'));
     } finally {
       setLoading(false);
     }

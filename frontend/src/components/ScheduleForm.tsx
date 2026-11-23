@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { k8sAPI, schedulesAPI } from '../services/api';
+import { getApiErrorMessage, k8sAPI, schedulesAPI } from '../services/api';
 import type { DeploymentInfo, Schedule } from '../types';
 
 interface ScheduleFormProps {
@@ -32,7 +32,19 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
 
   useEffect(() => {
     if (selectedNamespace) {
-      loadDeployments();
+      const loadDeployments = async () => {
+        try {
+          setLoadingDeployments(true);
+          const data = await k8sAPI.getDeployments(selectedNamespace);
+          setDeployments(data);
+        } catch (err) {
+          setError(getApiErrorMessage(err, 'Failed to load deployments'));
+        } finally {
+          setLoadingDeployments(false);
+        }
+      };
+
+      void loadDeployments();
     } else {
       setDeployments([]);
       setSelectedDeployment('');
@@ -44,20 +56,8 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
       const data = await k8sAPI.getNamespaces();
       // Backend now only returns allowed namespaces (with h8ber-mate label)
       setNamespaces(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load namespaces');
-    }
-  };
-
-  const loadDeployments = async () => {
-    try {
-      setLoadingDeployments(true);
-      const data = await k8sAPI.getDeployments(selectedNamespace);
-      setDeployments(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load deployments');
-    } finally {
-      setLoadingDeployments(false);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to load namespaces'));
     }
   };
 
@@ -91,8 +91,8 @@ export const ScheduleForm: React.FC<ScheduleFormProps> = ({
       }
 
       onSuccess();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || `Failed to ${isEditMode ? 'update' : 'create'} schedule`);
+    } catch (err) {
+      setError(getApiErrorMessage(err, `Failed to ${isEditMode ? 'update' : 'create'} schedule`));
     } finally {
       setLoading(false);
     }

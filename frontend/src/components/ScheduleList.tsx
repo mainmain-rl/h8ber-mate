@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { schedulesAPI } from '../services/api';
+import { getApiErrorMessage, schedulesAPI } from '../services/api';
 import type { Schedule } from '../types';
 
 interface SchedulesByNamespace {
@@ -28,8 +28,8 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({
       });
       // Refresh data from parent
       onRefresh();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update schedule');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to update schedule'));
     } finally {
       setLoadingSchedule(null);
     }
@@ -45,8 +45,8 @@ export const ScheduleList: React.FC<ScheduleListProps> = ({
       await schedulesAPI.delete(id);
       // Refresh data from parent
       onRefresh();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete schedule');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to delete schedule'));
       setLoadingSchedule(null);
     }
   };

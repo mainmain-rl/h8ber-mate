@@ -4,7 +4,7 @@ Public API:
 - ApiKeyCreate, ApiKeyResponse, ApiKeyCreatedResponse: Pydantic DTOs for API
 """
 
-from .models import ApiKeyCreate, ApiKeyResponse, ApiKeyCreatedResponse
+from .models import ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyResponse
 
 __all__ = [
     "ApiKeyCreate",

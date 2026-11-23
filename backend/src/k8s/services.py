@@ -1,10 +1,15 @@
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from kubernetes import client, config
-from kubernetes.client.rest import ApiException
 from kubernetes.client.models.v1_deployment import V1Deployment
+from kubernetes.client.rest import ApiException
+
 from src.shared.settings import settings
+
+if TYPE_CHECKING:
+    from src.schedules import DeploymentInfo
 
 
 class K8sClient:

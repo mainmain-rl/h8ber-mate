@@ -7,7 +7,7 @@ Public API:
 - get_current_time, hash_password, verify_password: Utilities
 """
 
-from .database import AsyncSessionLocal, Base, engine, get_db, init_db, hash_password, verify_password
+from .database import AsyncSessionLocal, Base, engine, get_db, hash_password, init_db, verify_password
 from .models import ApiKeyDB, RefreshTokenDB, UserDB, UserNamespaceDB, get_current_time
 
 __all__ = [

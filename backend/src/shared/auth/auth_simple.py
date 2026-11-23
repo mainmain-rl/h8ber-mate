@@ -10,8 +10,9 @@ from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared import get_db, RefreshTokenDB, UserDB, UserNamespaceDB, settings
-from src.shared.database.database import verify_password
+from src.shared.database.database import get_db, verify_password
+from src.shared.database.models import RefreshTokenDB, UserDB, UserNamespaceDB
+from src.shared.settings import settings
 
 security = HTTPBearer()
 

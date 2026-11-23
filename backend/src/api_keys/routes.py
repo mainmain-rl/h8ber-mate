@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared import get_client_ip, log_action, get_current_user, get_db
+from src.shared import get_client_ip, get_current_user, get_db, log_action
 
 from .models import ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyResponse
 from .services import create_api_key, list_user_api_keys, revoke_api_key

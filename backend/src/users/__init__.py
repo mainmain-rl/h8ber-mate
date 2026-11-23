@@ -4,12 +4,12 @@ Public API:
 - UserCreate, UserUpdate, UserResponse, UserListResponse: Pydantic DTOs for API
 """
 
-from .models import UserCreate, UserUpdate, UserResponse, UserListResponse, UserBase
+from .models import UserBase, UserCreate, UserListResponse, UserResponse, UserUpdate
 
 __all__ = [
     "UserCreate",
     "UserUpdate",
-    "UserResponse", 
+    "UserResponse",
     "UserListResponse",
     "UserBase",
 ]

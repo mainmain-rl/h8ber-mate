@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 
 import pytz
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
-from sqlalchemy.orm import relationship
 
 from src.shared.database.database import Base
 from src.shared.settings import settings

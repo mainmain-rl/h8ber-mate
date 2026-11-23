@@ -7,9 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.schedules.services import SchedulerService
 from src.schedules.db import ScheduleDB
-from src.shared.settings import settings
+from src.schedules.services import SchedulerService
 
 
 @pytest.fixture

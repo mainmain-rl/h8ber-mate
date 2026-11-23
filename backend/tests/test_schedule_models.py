@@ -2,10 +2,8 @@
 Tests for Schedule models.
 """
 
-from datetime import datetime, timedelta
 
 import pytest
-from pytz import timezone
 
 from src.schedules.models import ScheduleBase, ScheduleCreate, ScheduleUpdate
 from src.shared.settings import settings

@@ -5,14 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared import (
+    UserDB,
+    UserNamespaceDB,
     get_client_ip,
-    log_action,
     get_current_admin_user,
     get_current_user,
     get_db,
     hash_password,
-    UserDB,
-    UserNamespaceDB,
+    log_action,
 )
 
 from .models import UserCreate, UserListResponse, UserResponse, UserUpdate
